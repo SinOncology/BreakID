@@ -1,0 +1,9 @@
+src/installdir.h
+.AppleDouble
+.DS_Store
+build/
+.idea/
+bin/
+cmake-build-debug/
+thirdparty/
+version.txt
