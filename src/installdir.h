@@ -1,1 +1,1 @@
-#define INSTALLDIR "/Users/bhuang/CLionProjects/ToClean/BreakID"
+#define INSTALLDIR "/Users/bhuang/CLionProjects/BreakID"

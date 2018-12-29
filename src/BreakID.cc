@@ -1,243 +1,17 @@
-
-#include <algorithm>
-#include <zlib.h>
-#include <string>
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <set>
-#include <map>
-#include <list>
-#include <sstream>
-#include <htslib/sam.h>
-#include <sam.h>
-
-#include "util_bam.h"
-#include "util_bed.h"
-#include "util_cluster.h"
-#include "installdir.h"
-#include "RefSeqTranscript.h"
-#include "BamAlignment.h"
-#include <getopt.h>
-#include <cmath>
+#include "BreakID.h"
 
 using namespace std;
 
-string enspan_help = "      SYNOPSIS \n \t sinotools enspan <options>\n\n \
-     DESCRIPTION\n \
-     \t -h -? -help \t help\n \
-     \t -i        \t input bam-file\n \
-     \t -o        \t output file (prefix only)\n \
-     \t -q        \t encompassing reads quality thresholds  [20]\n\
-     \t -b        \t genome build (hg18,hg19) [hg19]\n \
-     \t -t        \t distance relative to (sqrt(2)*(insert size mean +3* insert size sd))  [2]\n \
-     \t -fast     \t use the fast cluster strategy [default no] \n \
-     \t -all       \t no filter enspan out [default is filter]  \n ";
-
-//structures
-
-
-typedef struct
-{
-  string id;
-  string qname;
-  long p1_flag;
-  long p2_flag;
-  string p1_chr;
-  string p2_chr;
-  uint32_t p1_pos;
-  uint32_t p2_pos;
-  long p1_mapq;
-  long p2_mapq;
-  char p1_strand;
-  char p2_strand;
-  int is_isolated;
-  int cluster;
-  string cluster_id;
-  uint32_t p1_chr_pos;
-  uint32_t p2_chr_pos;
-} discordant_pair;
-
-typedef struct
-{
-  long id;
-  string p1_chr;
-  uint64_t p1_mean_pos;
-  uint32_t p1_min_pos;
-  uint32_t p1_max_pos;
-  uint32_t p1_exact_pos;
-  string p2_chr;
-  uint64_t p2_mean_pos;
-  uint32_t p2_min_pos;
-  uint32_t p2_max_pos;
-  int32_t p2_exact_pos;
-  long n_split_read;
-  long n_discordant_pair;
-  bool inv;
-  string inv_type = ".";
-  string fusion_type = ".";
-  string discordant_reads;
-  string split_reads;
-  string p1_behalf_gene;
-  string p1_gene_part = "0";
-  string p1_genes;
-  string p2_behalf_gene;
-  string p2_gene_part = "0";
-  string p2_genes;
-  string p1_rpt;
-  string p2_rpt;
-  string p1_strand;
-  string p2_strand;
-  string p1_exon_info;
-  string p2_exon_info;
-  string p1_part = "";
-  string p2_part = "";
-  bool hotspot = false;
-  bool cosmic = false;
-  set<string> drp_type_set;
-//  string cosmicID = "";
-//  string fusionID = "";
-  string fusion_pair = "";
-  string p1_bp_exon = "";
-  string p2_bp_exon = "";
-  string up_gene = "";
-  string down_gene = "";
-  bool sino_pair_match = false;
-  bool cosmic_pair_match = false;
-  double p1_bp_depth = 0;
-  double p2_bp_depth = 0;
-  double p1_coverage = 0;
-  double p2_coverage = 0;
-  float p1_alle_freq = 0.0;
-  float p2_alle_freq = 0.0;
-  bool is_rpt = false;
-} cluster_info;
-
-
-typedef struct
-{
-  string primary_chr = "";
-  string secondary_chr = "";
-  uint32_t primary_start = 0;
-  uint32_t secondary_start = 0;
-  uint32_t primary_end = 0;
-  uint32_t secondary_end = 0;
-  string primary_cigar_str = "";
-  string secondary_cigar_str = "";
-  string sa_tag = "";
-  uint32_t primary_bp = 0;
-  uint32_t secondary_bp = 0;
-  bool secondary = false;
-  int flag = -1;
-  string read_name = "";
-  bam1_t *current_align;
-} split_align_pair;
-
-typedef struct
-{
-  int32_t p1_pos = -1;
-  int32_t p2_pos = -1;
-  string p1_match_part = "";
-  string p2_match_part = "";
-} bp_pos_pair;
-
-
-typedef struct
-{
-  string p1_chr = "";
-  string p2_chr = "";
-  int32_t p1_bp = -1;
-  int32_t p2_bp = -1;
-  string p1_part = "";
-  string p2_part = "";
-  int encompass_num = 0;
-} breakpoint_pair;
-
-
-//prototypes
-void
-scan_discordant_pairs(const string &inp_file, const string &build, long qual, double w,
-                      map<string, vector<discordant_pair>> &enspan_map, string nib_dir);
-
-void annotate_cluster_for_sa_tag(vector<cluster_info> &clusters, string nib_dir);
-
-void get_mean_insert_size(string input_bam, vector<double> &insert);
-
-void get_chr_pair_set(vector<discordant_pair> &enspan, set<string> &chr_pair_set);
-
-void mask_pairs_chr_pos(vector<discordant_pair> &enspan, long distance);
-
-void build_pair_array(vector<discordant_pair> &, vector<point> &);
-
-bool cmp_p1_enspan_pairs(discordant_pair a, discordant_pair b)
-{
-  return (a.p1_chr_pos < b.p1_chr_pos);
-}
-
-bool cmp_p2_enspan_pairs(discordant_pair a, discordant_pair b)
-{
-  return (a.p2_chr_pos < b.p2_chr_pos);
-}
-
-bool cmp_enspan_id(discordant_pair a, discordant_pair b)
-{
-  return (a.cluster < b.cluster);
-}
-
-bool cmp_cluster(cluster_info a, cluster_info b)
-{
-  return (a.n_discordant_pair > b.n_discordant_pair);
-}
-
-int
-find_cluster_pairs_enspan_ahc(vector<discordant_pair> &enspan, double distance_threshold, int distance_type,
-                              int min_reads_per_cluster);
-
-void
-add_cluster_id_for_enspan_vec(cluster_struct &main_cluster, vector<discordant_pair> &enspan, int min_reads_per_cluster);
-
-void add_enspan_point_id(vector<discordant_pair> &enspan_vec);
-
-void remove_isolated_pairs(vector<discordant_pair> &enspans, double w);
-
-void write_enspan_out(string out_file, vector<cluster_info> &cluster, bool filter);
-
-void write_enspan_params(string inp_file, string out_file, string build, double w, long qual);
-
-void
-add_exon_anno(vector<RefSeqTranscript> &txpts, string chr1, string chr2, long &p1_pos, long &p2_pos,
-              vector<string> &exon_infos, const string &p1_part, const string &p2_part);
-
-void add_exon_num_anno(RefSeqTranscript &txpt, long &pos, string &chr, vector<int> &exon_nums);
-
-int find_cluster_pairs_enspan_fast(vector<discordant_pair> &enspan, double w, int min_reads);
-
-void
-findClusterBreakPointInfoSaTag(string bam_file, vector<discordant_pair> &enspan, double w,
-                               vector<cluster_info> &cluster_vec, vector<bam1_t *> &split_reads, string nib_dir);
-
-void find_sa_reads(samfile_t *fp, const string region_chr, uint32_t region_start, uint32_t region_end,
-                   map<string, vector<split_align_pair>> &encompassing_map, bam_index_t *idx_bam);
-
-void findEncompassingReadsAndBreakPointInfo(map<long, cluster_info> &cluster_map, const string bam_file, const int w,
-                                            vector<bam1_t *> &split_reads);
-
-void find_bp_pair(map<string, vector<split_align_pair>> &p1_encompass_map,
-                  map<string, vector<split_align_pair>> &p2_encompass_map, breakpoint_pair &bp_pair,
-                  const string &p1_chr, const string &p2_chr, vector<bam1_t *> &split_reads, int bp_pos_error);
-
-string determine_fusion_type_from_drp(cluster_info &cluster);
-
-//main program
+/// main program
 int main(int argc, char *argv[])
 {
   clock_t start, end;
   clock_t scan_start, scan_end;
   clock_t cluster_start, cluster_end;
-  clock_t bp_find_start=0, bp_find_end=0;
+  clock_t bp_find_start = 0, bp_find_end = 0;
   start = clock();
   int longindex, opt;
-  // option definition
+  /// option definition
   static struct option longopts[] = {
     {"help", 0, 0, 'h'},
     {"help", 0, 0, '?'},
@@ -245,11 +19,10 @@ int main(int argc, char *argv[])
     {"o",    1, 0, 2},
     {"q",    1, 0, 3},
     {"n",    1, 0, 4},
-    {"b",    1, 0, 5},
-    {"fast", 0, 0, 6},
-    {"t",    0, 0, 7},
-    {"all",  0, 0, 0}
-//    {0,       0, 0, 0}
+    {"fast", 0, 0, 5},
+    {"t",    0, 0, 6},
+    {"all",  0, 0, 7}
+    
   };
   string inp_file = "";
   string out_file = "";
@@ -260,20 +33,20 @@ int main(int argc, char *argv[])
   int distance_type = 1; //add by jin
   int min_reads_per_cluster = 2;
   bool fast_cluster = false;
- 
+  
   optind = 0;
   bool filter = true;
   string nib_dir = "";
-  //parse command line arguments
+  /// parse command line arguments
   while ((opt = getopt_long_only(argc, argv, "h?", longopts, &longindex)) != -1)
   {
     switch (opt)
     {
     case 'h':
-      cerr << enspan_help;
+      cerr << BreakID_help;
       exit(1);
     case '?':
-      cerr << enspan_help;
+      cerr << BreakID_help;
       exit(1);
     case 1:
       inp_file = (string) optarg;
@@ -288,20 +61,12 @@ int main(int argc, char *argv[])
       nib_dir = (string) optarg;
       break;
     case 5:
-      build = (string) optarg;
-      if (build != "hg18" && build != "hg19")
-      {
-        cerr << "Error: please use hg18, hg19. Falling back to default value: hg19.\n";
-        build = "hg19";
-      }
-      break;
-    case 6:
       fast_cluster = true;
       break;
-    case 7:
+    case 6:
       times = (int) abs(atol(optarg));
       break;
-    case 0:
+    case 7:
       filter = false;
       break;
     default:
@@ -313,19 +78,19 @@ int main(int argc, char *argv[])
   if (inp_file.empty() || out_file.empty())
   {
     
-    cerr << enspan_help;
+    cerr << BreakID_help;
     cerr << "Error: input- and output file is required.\n";
     exit(1);
   }
   if (nib_dir.empty())
   {
     
-    cerr << enspan_help;
+    cerr << BreakID_help;
     cerr << "Error: nib file's root dir is required.\n";
     exit(1);
   }
   
-  map<string, vector<discordant_pair>> enspan_map;
+  map <string, vector<discordant_pair>> enspan_map;
   string tmp;
   stringstream line;
   vector<double> insert;
@@ -338,9 +103,9 @@ int main(int argc, char *argv[])
   cluster_dist = span_dist = mask_dist = scan_dist = times * sqrt(times) * (insert_size + 3 * insert_sd);
   cout << "cluster_dist = span_dist = mask_dist = scan_dist = " << cluster_dist << " .\n";
   //cluster index
-  vector<vector<long> > cluster_index;
-  vector<cluster_info> cluster;
-  vector<cluster_info> tmp_cluster_vec;
+  vector <vector<long>> cluster_index;
+  vector <cluster_info> cluster;
+  vector <cluster_info> tmp_cluster_vec;
   int root_cluster_num;
   int removed_isolated_pair_count = 0;
   int after_cluster_count = 0;
@@ -379,7 +144,7 @@ int main(int argc, char *argv[])
       sort(chr_it.second.begin(), chr_it.second.end(), cmp_enspan_id);
       //search for spanning reads
       bp_find_start = clock();
-      vector<bam1_t *> split_reads;
+      vector < bam1_t* > split_reads;
       split_reads.clear();
       
       /// use SA tag to find breakpoint
@@ -434,21 +199,21 @@ int main(int argc, char *argv[])
  * @param cluster_vec the produced cluster vector
  */
 void
-findClusterBreakPointInfoSaTag(string bam_file, vector<discordant_pair> &enspan, double w,
-                               vector<cluster_info> &cluster_vec, vector<bam1_t *> &split_reads, string nib_dir)
+findClusterBreakPointInfoSaTag(string bam_file, vector <discordant_pair> &enspan, double w,
+                               vector <cluster_info> &cluster_vec, vector<bam1_t *> &split_reads, string nib_dir)
 {
   stringstream line;
   int k, current_index;
   cluster_info tmp_cluster;
   
-  set<string> tmp_set;
+  set <string> tmp_set;
   
   map<long, cluster_info> cluster_map;
   map<long, cluster_info>::iterator cluster_map_it;
   map<long, vector<int>> cluster_enspan_index_map;
-  map<long, vector<int>>::iterator cluster_enspan_index_map_it;
+  map < long, vector < int >> ::iterator cluster_enspan_index_map_it;
   map<long, set<string>> cluster_enspan_type_map;
-  map<long, set<string>>::iterator cluster_enspan_type_map_it;
+  map < long, set < string >> ::iterator cluster_enspan_type_map_it;
   vector<int> enspan_index_vec;
   vector<int> tmp_vec(1, -1);
   int64_t mean_pos_dist = 0;
@@ -574,10 +339,10 @@ findClusterBreakPointInfoSaTag(string bam_file, vector<discordant_pair> &enspan,
         }
       }
       
-      tmp_cluster.p1_mean_pos = (uint32_t) ((double) tmp_cluster.p1_mean_pos / (double) tmp_cluster.n_discordant_pair);
-      tmp_cluster.p2_mean_pos = (uint32_t) ((double) tmp_cluster.p2_mean_pos / (double) tmp_cluster.n_discordant_pair);
+      tmp_cluster.p1_mean_pos = (uint32_t)((double) tmp_cluster.p1_mean_pos / (double) tmp_cluster.n_discordant_pair);
+      tmp_cluster.p2_mean_pos = (uint32_t)((double) tmp_cluster.p2_mean_pos / (double) tmp_cluster.n_discordant_pair);
       
-      mean_pos_dist = (int64_t) (tmp_cluster.p1_mean_pos - tmp_cluster.p2_mean_pos);
+      mean_pos_dist = (int64_t)(tmp_cluster.p1_mean_pos - tmp_cluster.p2_mean_pos);
       tmp_cluster.drp_type_set = cluster_enspan_type_map[tmp_cluster.id];
       
       if (!(tmp_cluster.p1_chr == tmp_cluster.p2_chr && mean_pos_dist <= 2 * w && mean_pos_dist >= -2 * w))
@@ -595,8 +360,9 @@ findClusterBreakPointInfoSaTag(string bam_file, vector<discordant_pair> &enspan,
     }
     
     map<long, vector<discordant_pair>> cluster_enspan_vec_map;
-    map<long, vector<discordant_pair>>::iterator cluster_enspan_vec_map_it;
-    vector<discordant_pair> tmp_pair;
+    map < long, vector < discordant_pair >> ::iterator
+    cluster_enspan_vec_map_it;
+    vector <discordant_pair> tmp_pair;
     int enspan_index;
     for (cluster_enspan_index_map_it = cluster_enspan_index_map.begin();
       cluster_enspan_index_map_it != cluster_enspan_index_map.end(); ++cluster_enspan_index_map_it)
@@ -630,7 +396,7 @@ void findEncompassingReadsAndBreakPointInfo(map<long, cluster_info> &cluster_map
   map<long, cluster_info>::iterator cluster_map_new_it;
   map<long, cluster_info> tmp_cluster_map;
   bam_index_t *idx_bam;
-  map<string, vector<split_align_pair>> p1_encompass_map, p2_encompass_map;
+  map <string, vector<split_align_pair>> p1_encompass_map, p2_encompass_map;
   breakpoint_pair bp_pair;
   
   /**
@@ -661,10 +427,10 @@ void findEncompassingReadsAndBreakPointInfo(map<long, cluster_info> &cluster_map
     bp_pair.p1_bp = -1;
     bp_pair.p2_chr = "";
     bp_pair.p2_bp = -1;
-    p1_region_start = (uint32_t) (cluster_map_it->second.p1_mean_pos - w);
-    p1_region_end = (uint32_t) (cluster_map_it->second.p1_mean_pos + w);
-    p2_region_start = (uint32_t) (cluster_map_it->second.p2_mean_pos - w);
-    p2_region_end = (uint32_t) (cluster_map_it->second.p2_mean_pos + w);
+    p1_region_start = (uint32_t)(cluster_map_it->second.p1_mean_pos - w);
+    p1_region_end = (uint32_t)(cluster_map_it->second.p1_mean_pos + w);
+    p2_region_start = (uint32_t)(cluster_map_it->second.p2_mean_pos - w);
+    p2_region_end = (uint32_t)(cluster_map_it->second.p2_mean_pos + w);
     p1_chr = cluster_map_it->second.p1_chr;
     p2_chr = cluster_map_it->second.p2_chr;
     find_sa_reads(fp, p1_chr, p1_region_start, p1_region_end, p1_encompass_map, idx_bam);
@@ -723,26 +489,26 @@ void findEncompassingReadsAndBreakPointInfo(map<long, cluster_info> &cluster_map
   samclose(fp);
 }
 
-void annotate_cluster_for_sa_tag(vector<cluster_info> &clusters, string nib_dir)
+void annotate_cluster_for_sa_tag(vector <cluster_info> &clusters, string nib_dir)
 {
   string ref_gene = (std::string) INSTALLDIR + "/ref_files/refGene.txt";  /// refGene.txt
   map<string, int> hotspot_fusions;
   map<string, int>::iterator hotspot_fusions_it;
-  vector<map<string, string>> sino_anno_fusion_info;
-  vector<map<string, string>> cosmic_anno_fusion_info;
+  vector <map<string, string>> sino_anno_fusion_info;
+  vector <map<string, string>> cosmic_anno_fusion_info;
   
-  std::vector<RefSeqTranscript> txpts;
+  std::vector <RefSeqTranscript> txpts;
   readRefSeqTranscript(ref_gene, txpts);/// get all transcripts from ref gene file
-  std::vector<RefSeqTranscript> longest_txpts;
-  vector<string> gene_vec;
+  std::vector <RefSeqTranscript> longest_txpts;
+  vector <string> gene_vec;
   string fusion_5_3_exon_pair, fusion_5exon_pair, fusion_3exon_pair, fusion_no_exon_pair;
   
   add_cds_parts(txpts);/// add cds info to all txpts
   long p1_pos, p2_pos;
   string chr1, chr2;
   
-  vector<string> exon_infos;
-  vector<cluster_info> temp_clusters;
+  vector <string> exon_infos;
+  vector <cluster_info> temp_clusters;
   
   for (auto cluster:clusters)
   {
@@ -808,23 +574,24 @@ void annotate_cluster_for_sa_tag(vector<cluster_info> &clusters, string nib_dir)
  * @param p1_chr:the chromosome of p1 part
  * @param p2_chr:the chromosome of p2 part
  */
-void find_bp_pair(map<string, vector<split_align_pair>> &p1_encompass_map,
-                  map<string, vector<split_align_pair>> &p2_encompass_map, breakpoint_pair &bp_pair,
+void find_bp_pair(map <string, vector<split_align_pair>> &p1_encompass_map,
+                  map <string, vector<split_align_pair>> &p2_encompass_map, breakpoint_pair &bp_pair,
                   const string &p1_chr, const string &p2_chr, vector<bam1_t *> &split_reads, int bp_pos_error)
 {
   bam1_t *b_copy;
-  map<string, vector<split_align_pair>>::iterator p1_encompass_map_it, p2_encompass_map_it;
+  map < string, vector < split_align_pair >> ::iterator
+  p1_encompass_map_it, p2_encompass_map_it;
   bp_pair.p1_chr = p1_chr;
   bp_pair.p2_chr = p2_chr;
   split_align_pair p1_tmp_align_pair, p2_tmp_align_pair;
   map<uint32_t, int> p1_bp_pos_count_map, p2_bp_pos_count_map;
   map<uint32_t, int>::iterator p1_bp_pos_count_it, p2_bp_pos_count_it;
-  vector<string> sa_substrs;
+  vector <string> sa_substrs;
   bool condition, new_condition;
- // int max_count, max_count_new;
-  vector<pair<int32_t, int32_t >> bp_pos_pair_vec;
-  vector<bp_pos_pair> bp_pos_pair_vec_new;
-  vector<bp_pos_pair> bp_pos_pair_vec_update;
+  // int max_count, max_count_new;
+  vector <pair<int32_t, int32_t >> bp_pos_pair_vec;
+  vector <bp_pos_pair> bp_pos_pair_vec_new;
+  vector <bp_pos_pair> bp_pos_pair_vec_update;
   bp_pos_pair pair1, pair2, pair3, pair4, pair_update;
   bp_pos_pair_vec.clear();
   p1_bp_pos_count_map.clear();
@@ -1029,7 +796,7 @@ void find_bp_pair(map<string, vector<split_align_pair>> &p1_encompass_map,
   
   int max_count_update = 0;
   string tmp_str_update = "";
-  vector<string> tmp_substrs_update;
+  vector <string> tmp_substrs_update;
   uint32_t tmp_p1_pos, tmp_p2_pos;
   bp_pos_pair tmp_bps;
   
@@ -1099,7 +866,7 @@ void find_bp_pair(map<string, vector<split_align_pair>> &p1_encompass_map,
  * @param idx_bam : bam index
  */
 void find_sa_reads(samfile_t *fp, const string region_chr, uint32_t region_start, uint32_t region_end,
-                   map<string, vector<split_align_pair>> &encompassing_map, bam_index_t *idx_bam)
+                   map <string, vector<split_align_pair>> &encompassing_map, bam_index_t *idx_bam)
 {
   int tid_t;
   int beg_t, end_t;
@@ -1108,16 +875,17 @@ void find_sa_reads(samfile_t *fp, const string region_chr, uint32_t region_start
   BamAlignment align;
   uint32_t sa_start, sa_end;
   bool condition, advanced_contition;
-  vector<string> sa_tag_substr;
+  vector <string> sa_tag_substr;
   CigarRoller tmp_sa_cigar, tmp_cigar;
   bam_parse_region(fp->header, region_chr.c_str(), &tid_t, &beg_t, &end_t);
   iter_bam = bam_iter_query(idx_bam, tid_t, region_start, region_end);//// bam index
   bam1_t *b = bam_init1();
   int total_coverage = 0;
   int total_evidence_alignments_num = 0;
-  map<string, vector<split_align_pair>>::iterator encompassing_map_it;
+  map < string, vector < split_align_pair >> ::iterator
+  encompassing_map_it;
   encompassing_map.clear();
-  vector<split_align_pair> tmp_split_align_pair_vector;
+  vector <split_align_pair> tmp_split_align_pair_vector;
   split_align_pair tmp_pair;
   ///when determine the complementary cigar, we can tolerate mismatch numbers
   int mismatch_num = 10;
@@ -1275,11 +1043,11 @@ void find_sa_reads(samfile_t *fp, const string region_chr, uint32_t region_start
  * @param min_reads : minimum pairs number of each cluster should have
  * @return
  */
-int find_cluster_pairs_enspan_fast(vector<discordant_pair> &enspan, double w, int min_reads)
+int find_cluster_pairs_enspan_fast(vector <discordant_pair> &enspan, double w, int min_reads)
 {
   int i, j, k, n;
   vector<int> cl_index;
-  vector<discordant_pair> tmp_enspan;
+  vector <discordant_pair> tmp_enspan;
   stringstream line;
   long pre_pos;
   map<string, int> key, key_cl;
@@ -1413,7 +1181,7 @@ void write_enspan_params(string inp_file, string out_file, string build, double 
   out.close();
 }
 
-void write_enspan_out(string out_file, vector<cluster_info> &cluster, bool filter)
+void write_enspan_out(string out_file, vector <cluster_info> &cluster, bool filter)
 {
   bool condition_all, condition_filter;
   string hotspot, cosmic, hotspot_pair_match, cosmic_pair_match;
@@ -1500,9 +1268,9 @@ void write_enspan_out(string out_file, vector<cluster_info> &cluster, bool filte
  * @param w distance cutoff
  * @param rkey
  */
-void remove_isolated_pairs(vector<discordant_pair> &enspans, double w)
+void remove_isolated_pairs(vector <discordant_pair> &enspans, double w)
 {
-  vector<discordant_pair> enspan_vec_tmp;
+  vector <discordant_pair> enspan_vec_tmp;
   sort(enspans.begin(), enspans.end(), cmp_p1_enspan_pairs);
   mask_pairs_chr_pos(enspans, w);
   if (!enspans.empty())
@@ -1516,7 +1284,7 @@ void remove_isolated_pairs(vector<discordant_pair> &enspans, double w)
   }
 }
 
-void add_enspan_point_id(vector<discordant_pair> &enspan_vec)
+void add_enspan_point_id(vector <discordant_pair> &enspan_vec)
 {
   for (size_t i = 0; i < enspan_vec.size(); ++i)
   {
@@ -1534,10 +1302,10 @@ void add_enspan_point_id(vector<discordant_pair> &enspan_vec)
  * @return
  */
 int
-find_cluster_pairs_enspan_ahc(vector<discordant_pair> &enspan_vec, double distance_threshold, int distance_type,
+find_cluster_pairs_enspan_ahc(vector <discordant_pair> &enspan_vec, double distance_threshold, int distance_type,
                               int min_reads_per_cluster)
 {
-  vector<point> points;
+  vector <point> points;
   cluster_struct main_cluster;
   clock_t build_array_start, build_array_end, cluster_start, cluster_end;
   build_array_start = clock();
@@ -1558,9 +1326,9 @@ find_cluster_pairs_enspan_ahc(vector<discordant_pair> &enspan_vec, double distan
 
 
 void add_cluster_id_for_enspan_vec(cluster_struct &main_cluster,
-                                   vector<discordant_pair> &enspan, int min_reads_per_cluster)
+                                   vector <discordant_pair> &enspan, int min_reads_per_cluster)
 {
-  vector<discordant_pair> tmp_enspan_vec;
+  vector <discordant_pair> tmp_enspan_vec;
   string cluster_id;
   int k = 0;
   for (int i = 0; i < main_cluster.num_nodes; ++i)
@@ -1593,7 +1361,7 @@ void add_cluster_id_for_enspan_vec(cluster_struct &main_cluster,
  */
 void
 scan_discordant_pairs(const string &inp_file, const string &build, long qual, double w,
-                      map<string, vector<discordant_pair>> &enspan_map, string nib_dir)
+                      map <string, vector<discordant_pair>> &enspan_map, string nib_dir)
 {
   //io-streams
   ifstream in;
@@ -1601,14 +1369,14 @@ scan_discordant_pairs(const string &inp_file, const string &build, long qual, do
   //variables
   //bool is_eof;
   string ref_name, tmp;
-  vector<discordant_pair> enspan;
+  vector <discordant_pair> enspan;
   
   //reference names
-  map<string, string> key_ref;
+  map <string, string> key_ref;
   map<string, string>::iterator it_ref;
   
   //variables for misplaced reads
-  map<string, bam_reduced> readname_2_alignment;
+  map <string, bam_reduced> readname_2_alignment;
   map<string, bam_reduced>::iterator it_mpr;
   bam_reduced tmp_mpr;
   
@@ -1729,9 +1497,9 @@ scan_discordant_pairs(const string &inp_file, const string &build, long qual, do
   cout << "Scanning discordant read pairs done.\n";
   samclose(fp);
   
-  set<string> chr_pair_set;
+  set <string> chr_pair_set;
   get_chr_pair_set(enspan, chr_pair_set);
-  vector<discordant_pair> tmp_enspan_vec;
+  vector <discordant_pair> tmp_enspan_vec;
   
   for (auto set_it = chr_pair_set.begin(); set_it != chr_pair_set.end(); ++set_it)
   {
@@ -1758,8 +1526,8 @@ scan_discordant_pairs(const string &inp_file, const string &build, long qual, do
  * @param p2_part
  */
 void
-add_exon_anno(vector<RefSeqTranscript> &txpts, string chr1, string chr2, long &p1_pos, long &p2_pos,
-              vector<string> &exon_infos, const string &p1_part, const string &p2_part)
+add_exon_anno(vector <RefSeqTranscript> &txpts, string chr1, string chr2, long &p1_pos, long &p2_pos,
+              vector <string> &exon_infos, const string &p1_part, const string &p2_part)
 {
   int record_count_p1;
   int record_count_p2;
@@ -1769,9 +1537,9 @@ add_exon_anno(vector<RefSeqTranscript> &txpts, string chr1, string chr2, long &p
   p1_gene = p2_gene = p1_txpt = p2_txpt = p1_exon_info = p2_exon_info = p1_strand = p2_strand = "";
   vector<int> p1_exon_no, p2_exon_no;
   RefSeqTranscript tmp_txpt_p1, tmp_txpt_p2;
-  vector<RefSeqTranscript> tmp_txpts_vec_p1, tmp_txpts_vec_p2;
+  vector <RefSeqTranscript> tmp_txpts_vec_p1, tmp_txpts_vec_p2;
   string p1_gene_vec_str, p2_gene_vec_str;
-  set<string> p1_gene_vec, p2_gene_vec;
+  set <string> p1_gene_vec, p2_gene_vec;
   set<string>::iterator genes_it;
   string p1_gene_part = "";
   string p2_gene_part = "";
@@ -2024,7 +1792,7 @@ void add_exon_num_anno(RefSeqTranscript &txpt, long &pos, string &chr, vector<in
   exon_nums.push_back(end_exon_no);
 }
 
-void build_pair_array(vector<discordant_pair> &enspan_vec, vector<point> &points)//传递指向points数组的指针
+void build_pair_array(vector <discordant_pair> &enspan_vec, vector <point> &points)//传递指向points数组的指针
 {
   for (size_t i = 0; i < enspan_vec.size(); ++i)
   {
@@ -2042,11 +1810,11 @@ void build_pair_array(vector<discordant_pair> &enspan_vec, vector<point> &points
  * @param enspan
  * @param distance
  */
-void mask_pairs_chr_pos(vector<discordant_pair> &enspan, long distance)
+void mask_pairs_chr_pos(vector <discordant_pair> &enspan, long distance)
 {
   long Lx, Ly;
   long lr, ll, np;
-  vector<discordant_pair> enspans_tmp;
+  vector <discordant_pair> enspans_tmp;
   //long i;
   //int n = distance;
   np = enspan.size();
@@ -2059,8 +1827,8 @@ void mask_pairs_chr_pos(vector<discordant_pair> &enspan, long distance)
   if (np >= 3)
   {
     //first read pair
-    Lx = abs((int32_t) (enspan[1].p1_chr_pos - enspan[2].p1_chr_pos));
-    Ly = abs((int32_t) (enspan[1].p2_chr_pos - enspan[2].p2_chr_pos));
+    Lx = abs((int32_t)(enspan[1].p1_chr_pos - enspan[2].p1_chr_pos));
+    Ly = abs((int32_t)(enspan[1].p2_chr_pos - enspan[2].p2_chr_pos));
     if (!(Lx > distance || Ly > distance))
     {
       enspans_tmp.push_back(enspan[1]);
@@ -2070,20 +1838,20 @@ void mask_pairs_chr_pos(vector<discordant_pair> &enspan, long distance)
       enspan[1].is_isolated = 1;
     }
     //last read pair
-    Lx = abs((int32_t) (enspan[np - 1].p1_chr_pos - enspan[np - 2].p1_chr_pos));
-    Ly = abs((int32_t) (enspan[np - 1].p2_chr_pos - enspan[np - 2].p2_chr_pos));
+    Lx = abs((int32_t)(enspan[np - 1].p1_chr_pos - enspan[np - 2].p1_chr_pos));
+    Ly = abs((int32_t)(enspan[np - 1].p2_chr_pos - enspan[np - 2].p2_chr_pos));
     if (Lx > distance || Ly > distance)
       enspan[np - 1].is_isolated = 1;
     for (int i = 1; i < np - 1; i++)
     {
-      ll = abs((int32_t) (enspan[i - 1].p1_chr_pos - enspan[i].p1_chr_pos));
-      lr = abs((int32_t) (enspan[i + 1].p1_chr_pos - enspan[i].p1_chr_pos));
+      ll = abs((int32_t)(enspan[i - 1].p1_chr_pos - enspan[i].p1_chr_pos));
+      lr = abs((int32_t)(enspan[i + 1].p1_chr_pos - enspan[i].p1_chr_pos));
       if (ll < lr)
         Lx = ll;
       else
         Lx = lr;
-      ll = abs((int32_t) (enspan[i - 1].p2_chr_pos - enspan[i].p2_chr_pos));
-      lr = abs((int32_t) (enspan[i + 1].p2_chr_pos - enspan[i].p2_chr_pos));
+      ll = abs((int32_t)(enspan[i - 1].p2_chr_pos - enspan[i].p2_chr_pos));
+      lr = abs((int32_t)(enspan[i + 1].p2_chr_pos - enspan[i].p2_chr_pos));
       if (ll < lr)
         Ly = ll;
       else
@@ -2108,7 +1876,7 @@ void mask_pairs_chr_pos(vector<discordant_pair> &enspan, long distance)
   
 }
 
-void get_chr_pair_set(vector<discordant_pair> &enspan, set<string> &chr_pair_set)
+void get_chr_pair_set(vector <discordant_pair> &enspan, set <string> &chr_pair_set)
 {
   
   for (int i = 0; i < enspan.size(); ++i)

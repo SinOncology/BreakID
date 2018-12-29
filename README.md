@@ -54,9 +54,9 @@ Bam file must be produced by the short reads mapping algorithm that can mark ali
 Citation
 --------
 
-Linfang Jin, Dai Heng, Bingding Huang.  
+Linfang Jin, Jinhuo Lai, Yang Zhang, Ying Fu, Shuhang Wang, Heng Dai, Bingding Huang. 
 [BreakID: genomics breakpoints identification to detect gene fusion events using discordant pairs and split read.](http://bioinformatics.oxfordjournals.org/)  
-Bioinformatics 2018 xx: xxxx-xxxx.
+Bioinformatics, 2018 accepted.
 
 
 License
