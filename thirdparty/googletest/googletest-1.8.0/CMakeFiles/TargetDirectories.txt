@@ -1,0 +1,8 @@
+/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/install/strip.dir
+/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/install/local.dir
+/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/install.dir
+/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/list_install_components.dir
+/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/edit_cache.dir
+/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/gtest_main.dir
+/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/rebuild_cache.dir
+/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/gtest.dir

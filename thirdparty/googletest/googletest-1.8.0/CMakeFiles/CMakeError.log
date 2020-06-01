@@ -1,0 +1,51 @@
+Determining if the pthread_create exist failed with the following output:
+Change Dir: /mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_7f8ff/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_7f8ff.dir/build.make CMakeFiles/cmTC_7f8ff.dir/build
+gmake[1]: Entering directory `/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_7f8ff.dir/CheckSymbolExists.c.o
+/mnt/sata3_storage/pipe_app/anaconda3/bin/x86_64-conda_cos6-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -pipe    -o CMakeFiles/cmTC_7f8ff.dir/CheckSymbolExists.c.o   -c /mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+Linking C executable cmTC_7f8ff
+/mnt/sata3_storage/pipe_app/cmake-3.13.0/bin/cmake -E cmake_link_script CMakeFiles/cmTC_7f8ff.dir/link.txt --verbose=1
+/mnt/sata3_storage/pipe_app/anaconda3/bin/x86_64-conda_cos6-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -pipe   -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now  -rdynamic CMakeFiles/cmTC_7f8ff.dir/CheckSymbolExists.c.o  -o cmTC_7f8ff 
+CMakeFiles/cmTC_7f8ff.dir/CheckSymbolExists.c.o: In function `main':
+CheckSymbolExists.c:(.text.startup+0x3): undefined reference to `pthread_create'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [cmTC_7f8ff] Error 1
+gmake[1]: Leaving directory `/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/CMakeTmp'
+gmake: *** [cmTC_7f8ff/fast] Error 2
+
+File /mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+/* */
+#include <pthread.h>
+
+int main(int argc, char** argv)
+{
+  (void)argv;
+#ifndef pthread_create
+  return ((int*)(&pthread_create))[argc];
+#else
+  (void)argc;
+  return 0;
+#endif
+}
+
+Determining if the function pthread_create exists in the pthreads failed with the following output:
+Change Dir: /mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_eefde/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_eefde.dir/build.make CMakeFiles/cmTC_eefde.dir/build
+gmake[1]: Entering directory `/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_eefde.dir/CheckFunctionExists.c.o
+/mnt/sata3_storage/pipe_app/anaconda3/bin/x86_64-conda_cos6-linux-gnu-cc   -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -pipe -DCHECK_FUNCTION_EXISTS=pthread_create   -o CMakeFiles/cmTC_eefde.dir/CheckFunctionExists.c.o   -c /mnt/sata3_storage/pipe_app/cmake-3.13.0/share/cmake-3.13/Modules/CheckFunctionExists.c
+Linking C executable cmTC_eefde
+/mnt/sata3_storage/pipe_app/cmake-3.13.0/bin/cmake -E cmake_link_script CMakeFiles/cmTC_eefde.dir/link.txt --verbose=1
+/mnt/sata3_storage/pipe_app/anaconda3/bin/x86_64-conda_cos6-linux-gnu-cc -march=nocona -mtune=haswell -ftree-vectorize -fPIC -fstack-protector-strong -fno-plt -O2 -pipe -DCHECK_FUNCTION_EXISTS=pthread_create  -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now  -rdynamic CMakeFiles/cmTC_eefde.dir/CheckFunctionExists.c.o  -o cmTC_eefde -lpthreads 
+/mnt/sata3_storage/pipe_app/anaconda3/bin/../lib/gcc/x86_64-conda_cos6-linux-gnu/7.2.0/../../../../x86_64-conda_cos6-linux-gnu/bin/ld: cannot find -lpthreads
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [cmTC_eefde] Error 1
+gmake[1]: Leaving directory `/mnt/sata3_storage/jinlinfang/CLionProjects/sinotools/thirdparty/googletest/googletest-1.8.0/CMakeFiles/CMakeTmp'
+gmake: *** [cmTC_eefde/fast] Error 2
+
+
