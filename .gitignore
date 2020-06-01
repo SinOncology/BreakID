@@ -5,5 +5,5 @@ build/
 .idea/
 bin/
 cmake-build-debug/
-thirdparty/
+#thirdparty/
 version.txt
