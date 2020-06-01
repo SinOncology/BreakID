@@ -1,1 +1,1 @@
-#define INSTALLDIR "/Users/bhuang/CLionProjects/BreakID"
+#define INSTALLDIR "/mnt/sata3_storage/jinlinfang/CLionProjects/BreakID"

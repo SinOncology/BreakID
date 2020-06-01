@@ -1,4 +1,4 @@
-#include "util.h"
+//#include "util.h"
 #include <sam.h>
 #include "util_bam.h"
 #include "nibtools.h"
